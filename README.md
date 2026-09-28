@@ -55,4 +55,4 @@
 Copy kode di bawah, paste ke executor (Delta, Codex, Fluxus):
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/Ysufu/MusicPlayer/refs/heads/main/YuszxMusic.lua"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/Ysufu/Universal-musicRBX/refs/heads/main/music.lua"))()
