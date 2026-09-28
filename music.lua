@@ -1,13 +1,14 @@
 --[[
     ═══════════════════════════════════════════════════════════════
-    🎵 YUSZX MUSIC PLAYER — UNIVERSAL SPOTIFY EDITION
+    🎵 YUSZX MUSIC — Mobile Spotify Style
     ═══════════════════════════════════════════════════════════════
-    ✅ Works di SEMUA game Roblox
-    ✅ Multi-fallback untuk executor yang beda
-    ✅ Multi-parent untuk Sound (SoundService, workspace, CoreGui)
-    ✅ Handle character respawn
-    ✅ Handle anti-cheat yang block CoreGui
-    ✅ Auto-detect metode terbaik
+    Layout mini player (fix di bawah layar):
+    ┌─────────────────────────────────────┐
+    │ ▬▬▬▬▬▬▬▬▬▬▬░░░░░░░░░░░░░░░░░░░░░░░ │ ← progress tipis
+    │ ┌──┐ Title                         │
+    │ │♪ │ Artist          ⏮ ▶ ⏭  ▲     │ ← kontrol kanan
+    │ └──┘                                │
+    └─────────────────────────────────────┘
     ═══════════════════════════════════════════════════════════════
 ]]
 
@@ -15,134 +16,82 @@
 -- UNIVERSAL HELPER
 -- ============================================
 local function getSafeParent()
-    -- Coba berbagai metode untuk dapetin parent UI
-    local parents = {}
-    
-    -- Method 1: gethui (Delta, Codex)
     if gethui then
         local ok, hui = pcall(gethui)
-        if ok and hui then table.insert(parents, hui) end
+        if ok and hui then return hui end
     end
-    
-    -- Method 2: game:GetService("CoreGui")
     local ok, cg = pcall(function() return game:GetService("CoreGui") end)
-    if ok and cg then table.insert(parents, cg) end
-    
-    -- Method 3: Player.PlayerGui (fallback)
+    if ok and cg then return cg end
     local plr = game:GetService("Players").LocalPlayer
-    local pg = plr:FindFirstChild("PlayerGui")
-    if pg then table.insert(parents, pg) end
-    
-    -- Coba satu-satu
-    for _, parent in ipairs(parents) do
-        local test = Instance.new("ScreenGui")
-        local success = pcall(function()
-            test.Parent = parent
-        end)
-        if success and test.Parent then
-            test:Destroy()
-            return parent
-        end
-        test:Destroy()
-    end
-    
-    return nil
+    return plr:FindFirstChild("PlayerGui") or plr
 end
 
 local function getSafeSoundParent()
-    -- Coba berbagai parent untuk Sound
     local candidates = {}
-    
-    pcall(function()
-        table.insert(candidates, game:GetService("SoundService"))
-    end)
-    
-    pcall(function()
-        table.insert(candidates, workspace)
-    end)
-    
-    pcall(function()
-        local cam = workspace.CurrentCamera
-        if cam then table.insert(candidates, cam) end
-    end)
-    
-    pcall(function()
-        local char = game:GetService("Players").LocalPlayer.Character
-        if char then table.insert(candidates, char) end
-    end)
-    
-    -- Test mana yang bisa dipakai
-    for _, parent in ipairs(candidates) do
-        if parent then
+    pcall(function() table.insert(candidates, game:GetService("SoundService")) end)
+    table.insert(candidates, workspace)
+    for _, p in ipairs(candidates) do
+        if p then
             local test = Instance.new("Sound")
-            local ok = pcall(function()
-                test.Parent = parent
-            end)
+            local ok = pcall(function() test.Parent = p end)
             if ok and test.Parent then
                 test:Destroy()
-                return parent
+                return p
             end
             test:Destroy()
         end
     end
-    
     return workspace
 end
+
+local uiParent = getSafeParent()
+local soundParent = getSafeSoundParent()
 
 -- ============================================
 -- CONFIG
 -- ============================================
 local CONFIG_FILE = "YuszxMusic_config.json"
-local DEFAULT_CONFIG = {
-    Volume = 0.5,
-    Loop = false,
-    Shuffle = false,
-    UIMinimized = false,
-}
+local DEFAULT_CONFIG = { Volume = 0.5, Loop = false, Shuffle = false, Minimized = false }
 local Config = {}
-local currentConfig = {}
-for k, v in pairs(DEFAULT_CONFIG) do currentConfig[k] = v end
+for k, v in pairs(DEFAULT_CONFIG) do Config[k] = v end
 
 function Config.load()
     if not readfile or not isfile then return end
     pcall(function()
         if isfile(CONFIG_FILE) then
-            local data = game:GetService("HttpService"):JSONDecode(readfile(CONFIG_FILE))
-            for k, v in pairs(data) do currentConfig[k] = v end
+            local d = game:GetService("HttpService"):JSONDecode(readfile(CONFIG_FILE))
+            for k, v in pairs(d) do Config[k] = v end
         end
     end)
 end
 function Config.save()
     if not writefile then return end
     pcall(function()
-        writefile(CONFIG_FILE, game:GetService("HttpService"):JSONEncode(currentConfig))
+        writefile(CONFIG_FILE, game:GetService("HttpService"):JSONEncode(Config))
     end)
 end
-function Config.get(k, d) return currentConfig[k] ~= nil and currentConfig[k] or d end
-function Config.set(k, v) currentConfig[k] = v; Config.save() end
+function Config.get(k, d) return Config[k] ~= nil and Config[k] or d end
+function Config.set(k, v) Config[k] = v; Config.save() end
 Config.load()
 
 -- ============================================
--- SPOTIFY COLOR PALETTE
+-- COLORS (Spotify)
 -- ============================================
-local COLORS = {
-    BG_BLACK = Color3.fromRGB(18, 18, 18),
-    BG_DARK = Color3.fromRGB(24, 24, 24),
-    BG_CARD = Color3.fromRGB(40, 40, 40),
-    BG_HOVER = Color3.fromRGB(45, 45, 45),
+local C = {
+    BG = Color3.fromRGB(18, 18, 18),
+    BG_LIGHT = Color3.fromRGB(36, 36, 36),
+    CARD = Color3.fromRGB(40, 40, 40),
     GREEN = Color3.fromRGB(29, 185, 84),
-    GREEN_HOVER = Color3.fromRGB(30, 215, 96),
-    TEXT_WHITE = Color3.fromRGB(255, 255, 255),
-    TEXT_GRAY = Color3.fromRGB(179, 179, 179),
-    TEXT_SUBTLE = Color3.fromRGB(120, 120, 120),
-    PROGRESS_BG = Color3.fromRGB(83, 83, 83),
-    PROGRESS_FILL = Color3.fromRGB(255, 255, 255),
+    WHITE = Color3.fromRGB(255, 255, 255),
+    GRAY = Color3.fromRGB(179, 179, 179),
+    DIM = Color3.fromRGB(120, 120, 120),
+    TRACK = Color3.fromRGB(85, 85, 85),
 }
 
 -- ============================================
 -- PLAYLIST
 -- ============================================
-local PLAYLIST = {
+  local PLAYLIST = {
     -- ============================================
     -- 🎵 POP / HITS (150+)
     -- ============================================
@@ -563,361 +512,389 @@ local PLAYLIST = {
     {id = "9045762265", title = "Positivity", artist = "Audio Library"},
     {id = "9045762015", title = "Good Times", artist = "Audio Library"},
     {id = "9045761765", title = "Celebrate", artist = "Audio Library"},
-}
+    }
 
 -- ============================================
--- PLAYER STATE
+-- STATE
 -- ============================================
-local SoundService = game:GetService("SoundService")
-local RunService = game:GetService("RunService")
-local Players = game:GetService("Players")
-local Player = Players.LocalPlayer
-local UserInputService = game:GetService("UserInputService")
-
 local currentSound = nil
 local currentIndex = 0
 local isPlaying = false
-local soundParent = nil  -- di-set nanti
+local isExpanded = false
 
 -- ============================================
--- GET SAFE PARENT
--- ============================================
-local uiParent = getSafeParent()
-soundParent = getSafeSoundParent()
-
-if not uiParent then
-    warn("[Yuszx] ❌ Gak bisa dapet UI parent! Script gak bisa jalan.")
-    return
-end
-
-print("[Yuszx] ✅ UI Parent: " .. uiParent:GetFullName())
-print("[Yuszx] ✅ Sound Parent: " .. soundParent:GetFullName())
-
--- ============================================
--- UI
+-- SCREEN
 -- ============================================
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "YuszxSpotify"
+ScreenGui.Name = "YuszxMusicMobile"
 ScreenGui.Parent = uiParent
 ScreenGui.IgnoreGuiInset = true
 ScreenGui.ResetOnSpawn = false
 ScreenGui.DisplayOrder = 999
 
--- Main Frame
-local MainFrame = Instance.new("Frame")
-MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 500, 0, 620)
-MainFrame.Position = UDim2.new(0.5, -250, 0.5, -310)
-MainFrame.BackgroundColor3 = COLORS.BG_BLACK
-MainFrame.BorderSizePixel = 0
-MainFrame.Active = true
-MainFrame.Draggable = true
-MainFrame.Parent = ScreenGui
+-- ============================================
+-- MINI PLAYER (FIX di bawah layar)
+-- ============================================
+local MiniFrame = Instance.new("Frame")
+MiniFrame.Name = "MiniFrame"
+MiniFrame.Size = UDim2.new(0, 340, 0, 62)
+MiniFrame.Position = UDim2.new(0.5, -170, 1, -82)
+MiniFrame.BackgroundColor3 = C.BG_LIGHT
+MiniFrame.BorderSizePixel = 0
+MiniFrame.Active = true
+MiniFrame.Draggable = true
+MiniFrame.Parent = ScreenGui
 
-local MainCorner = Instance.new("UICorner")
-MainCorner.CornerRadius = UDim.new(0, 12)
-MainCorner.Parent = MainFrame
+local MiniCorner = Instance.new("UICorner")
+MiniCorner.CornerRadius = UDim.new(0, 10)
+MiniCorner.Parent = MiniFrame
 
--- Top Bar
-local TopBar = Instance.new("Frame")
-TopBar.Size = UDim2.new(1, 0, 0, 50)
-TopBar.BackgroundColor3 = COLORS.BG_DARK
-TopBar.BorderSizePixel = 0
-TopBar.Parent = MainFrame
+local MiniStroke = Instance.new("UIStroke")
+MiniStroke.Color = Color3.fromRGB(50, 50, 50)
+MiniStroke.Thickness = 1
+MiniStroke.Parent = MiniFrame
 
-local TopCorner = Instance.new("UICorner")
-TopCorner.CornerRadius = UDim.new(0, 12)
-TopCorner.Parent = TopBar
+-- Progress bar TIPIS di ATAS mini player (kayak Spotify)
+local TopProgressBg = Instance.new("Frame")
+TopProgressBg.Size = UDim2.new(1, -20, 0, 2)
+TopProgressBg.Position = UDim2.new(0, 10, 0, 0)
+TopProgressBg.BackgroundColor3 = C.TRACK
+TopProgressBg.BorderSizePixel = 0
+TopProgressBg.Parent = MiniFrame
 
-local LogoCircle = Instance.new("Frame")
-LogoCircle.Size = UDim2.new(0, 32, 0, 32)
-LogoCircle.Position = UDim2.new(0, 14, 0, 9)
-LogoCircle.BackgroundColor3 = COLORS.GREEN
-LogoCircle.BorderSizePixel = 0
-LogoCircle.Parent = TopBar
+local TopProgressCorner = Instance.new("UICorner")
+TopProgressCorner.CornerRadius = UDim.new(1, 0)
+TopProgressCorner.Parent = TopProgressBg
 
-local LogoCorner = Instance.new("UICorner")
-LogoCorner.CornerRadius = UDim.new(1, 0)
-LogoCorner.Parent = LogoCircle
+local TopProgressFill = Instance.new("Frame")
+TopProgressFill.Size = UDim2.new(0, 0, 1, 0)
+TopProgressFill.BackgroundColor3 = C.WHITE
+TopProgressFill.BorderSizePixel = 0
+TopProgressFill.Parent = TopProgressBg
 
-local LogoText = Instance.new("TextLabel")
-LogoText.Size = UDim2.new(1, 0, 1, 0)
-LogoText.BackgroundTransparency = 1
-LogoText.Text = "♪"
-LogoText.TextColor3 = Color3.fromRGB(0, 0, 0)
-LogoText.Font = Enum.Font.GothamBold
-LogoText.TextSize = 22
-LogoText.Parent = LogoCircle
+local TopProgressCorner2 = Instance.new("UICorner")
+TopProgressCorner2.CornerRadius = UDim.new(1, 0)
+TopProgressCorner2.Parent = TopProgressFill
 
-local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, -120, 1, 0)
-Title.Position = UDim2.new(0, 56, 0, 0)
-Title.BackgroundTransparency = 1
-Title.Text = "Yuszx Music"
-Title.TextColor3 = COLORS.TEXT_WHITE
-Title.Font = Enum.Font.GothamBold
-Title.TextSize = 16
-Title.TextXAlignment = Enum.TextXAlignment.Left
-Title.Parent = TopBar
+-- Album Art (kiri)
+local MiniAlbum = Instance.new("Frame")
+MiniAlbum.Size = UDim2.new(0, 46, 0, 46)
+MiniAlbum.Position = UDim2.new(0, 8, 0, 8)
+MiniAlbum.BackgroundColor3 = C.CARD
+MiniAlbum.BorderSizePixel = 0
+MiniAlbum.Parent = MiniFrame
 
-local MinButton = Instance.new("TextButton")
-MinButton.Size = UDim2.new(0, 32, 0, 32)
-MinButton.Position = UDim2.new(1, -76, 0, 9)
-MinButton.BackgroundColor3 = COLORS.BG_CARD
-MinButton.Text = "−"
-MinButton.TextColor3 = COLORS.TEXT_WHITE
-MinButton.Font = Enum.Font.GothamBold
-MinButton.TextSize = 18
-MinButton.BorderSizePixel = 0
-MinButton.AutoButtonColor = false
-MinButton.Parent = TopBar
+local MiniAlbumCorner = Instance.new("UICorner")
+MiniAlbumCorner.CornerRadius = UDim.new(0, 6)
+MiniAlbumCorner.Parent = MiniAlbum
 
-local MinCorner = Instance.new("UICorner")
-MinCorner.CornerRadius = UDim.new(0, 16)
-MinCorner.Parent = MinButton
+local MiniAlbumIcon = Instance.new("TextLabel")
+MiniAlbumIcon.Size = UDim2.new(1, 0, 1, 0)
+MiniAlbumIcon.BackgroundTransparency = 1
+MiniAlbumIcon.Text = "♪"
+MiniAlbumIcon.TextColor3 = C.GREEN
+MiniAlbumIcon.Font = Enum.Font.GothamBold
+MiniAlbumIcon.TextSize = 22
+MiniAlbumIcon.Parent = MiniAlbum
 
-local CloseButton = Instance.new("TextButton")
-CloseButton.Size = UDim2.new(0, 32, 0, 32)
-CloseButton.Position = UDim2.new(1, -40, 0, 9)
-CloseButton.BackgroundColor3 = COLORS.BG_CARD
-CloseButton.Text = "✕"
-CloseButton.TextColor3 = COLORS.TEXT_WHITE
-CloseButton.Font = Enum.Font.GothamBold
-CloseButton.TextSize = 14
-CloseButton.BorderSizePixel = 0
-CloseButton.AutoButtonColor = false
-CloseButton.Parent = TopBar
+-- Title
+local MiniTitle = Instance.new("TextLabel")
+MiniTitle.Size = UDim2.new(1, -230, 0, 16)
+MiniTitle.Position = UDim2.new(0, 62, 0, 14)
+MiniTitle.BackgroundTransparency = 1
+MiniTitle.Text = "Pilih lagu..."
+MiniTitle.TextColor3 = C.WHITE
+MiniTitle.Font = Enum.Font.GothamBold
+MiniTitle.TextSize = 12
+MiniTitle.TextXAlignment = Enum.TextXAlignment.Left
+MiniTitle.TextTruncate = Enum.TextTruncate.AtEnd
+MiniTitle.Parent = MiniFrame
 
-local CloseCorner = Instance.new("UICorner")
-CloseCorner.CornerRadius = UDim.new(0, 16)
-CloseCorner.Parent = CloseButton
+-- Artist
+local MiniArtist = Instance.new("TextLabel")
+MiniArtist.Size = UDim2.new(1, -230, 0, 14)
+MiniArtist.Position = UDim2.new(0, 62, 0, 32)
+MiniArtist.BackgroundTransparency = 1
+MiniArtist.Text = "—"
+MiniArtist.TextColor3 = C.GRAY
+MiniArtist.Font = Enum.Font.GothamMedium
+MiniArtist.TextSize = 10
+MiniArtist.TextXAlignment = Enum.TextXAlignment.Left
+MiniArtist.TextTruncate = Enum.TextTruncate.AtEnd
+MiniArtist.Parent = MiniFrame
 
--- Now Playing
-local NowPlayingSection = Instance.new("Frame")
-NowPlayingSection.Size = UDim2.new(1, -28, 0, 100)
-NowPlayingSection.Position = UDim2.new(0, 14, 0, 62)
-NowPlayingSection.BackgroundTransparency = 1
-NowPlayingSection.Parent = MainFrame
+-- ========== KONTROL (kanan, compact) ==========
+-- Prev
+local PrevBtn = Instance.new("TextButton")
+PrevBtn.Size = UDim2.new(0, 28, 0, 28)
+PrevBtn.Position = UDim2.new(1, -160, 0, 17)
+PrevBtn.BackgroundTransparency = 1
+PrevBtn.Text = "⏮"
+PrevBtn.TextColor3 = C.WHITE
+PrevBtn.Font = Enum.Font.GothamBold
+PrevBtn.TextSize = 16
+PrevBtn.BorderSizePixel = 0
+PrevBtn.AutoButtonColor = false
+PrevBtn.Parent = MiniFrame
 
-local AlbumArt = Instance.new("Frame")
-AlbumArt.Size = UDim2.new(0, 90, 0, 90)
-AlbumArt.Position = UDim2.new(0, 0, 0, 5)
-AlbumArt.BackgroundColor3 = COLORS.BG_CARD
-AlbumArt.BorderSizePixel = 0
-AlbumArt.Parent = NowPlayingSection
+-- Play/Pause (1 tombol)
+local PlayBtn = Instance.new("TextButton")
+PlayBtn.Size = UDim2.new(0, 34, 0, 34)
+PlayBtn.Position = UDim2.new(1, -128, 0, 14)
+PlayBtn.BackgroundColor3 = C.WHITE
+PlayBtn.Text = "▶"
+PlayBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
+PlayBtn.Font = Enum.Font.GothamBold
+PlayBtn.TextSize = 16
+PlayBtn.BorderSizePixel = 0
+PlayBtn.AutoButtonColor = false
+PlayBtn.Parent = MiniFrame
 
-local AlbumCorner = Instance.new("UICorner")
-AlbumCorner.CornerRadius = UDim.new(0, 6)
-AlbumCorner.Parent = AlbumArt
+local PlayCorner = Instance.new("UICorner")
+PlayCorner.CornerRadius = UDim.new(1, 0)
+PlayCorner.Parent = PlayBtn
 
-local AlbumIcon = Instance.new("TextLabel")
-AlbumIcon.Size = UDim2.new(1, 0, 1, 0)
-AlbumIcon.BackgroundTransparency = 1
-AlbumIcon.Text = "🎵"
-AlbumIcon.TextColor3 = COLORS.GREEN
-AlbumIcon.Font = Enum.Font.GothamBold
-AlbumIcon.TextSize = 40
-AlbumIcon.Parent = AlbumArt
+-- Next
+local NextBtn = Instance.new("TextButton")
+NextBtn.Size = UDim2.new(0, 28, 0, 28)
+NextBtn.Position = UDim2.new(1, -90, 0, 17)
+NextBtn.BackgroundTransparency = 1
+NextBtn.Text = "⏭"
+NextBtn.TextColor3 = C.WHITE
+NextBtn.Font = Enum.Font.GothamBold
+NextBtn.TextSize = 16
+NextBtn.BorderSizePixel = 0
+NextBtn.AutoButtonColor = false
+NextBtn.Parent = MiniFrame
 
-local SongTitle = Instance.new("TextLabel")
-SongTitle.Size = UDim2.new(1, -110, 0, 26)
-SongTitle.Position = UDim2.new(0, 102, 0, 12)
-SongTitle.BackgroundTransparency = 1
-SongTitle.Text = "Pilih lagu untuk diputar"
-SongTitle.TextColor3 = COLORS.TEXT_WHITE
-SongTitle.Font = Enum.Font.GothamBold
-SongTitle.TextSize = 15
-SongTitle.TextXAlignment = Enum.TextXAlignment.Left
-SongTitle.TextTruncate = Enum.TextTruncate.AtEnd
-SongTitle.Parent = NowPlayingSection
+-- Expand (▲)
+local ExpandBtn = Instance.new("TextButton")
+ExpandBtn.Size = UDim2.new(0, 26, 0, 26)
+ExpandBtn.Position = UDim2.new(1, -56, 0, 18)
+ExpandBtn.BackgroundTransparency = 1
+ExpandBtn.Text = "▲"
+ExpandBtn.TextColor3 = C.WHITE
+ExpandBtn.Font = Enum.Font.GothamBold
+ExpandBtn.TextSize = 12
+ExpandBtn.BorderSizePixel = 0
+ExpandBtn.AutoButtonColor = false
+ExpandBtn.Parent = MiniFrame
 
-local SongArtist = Instance.new("TextLabel")
-SongArtist.Size = UDim2.new(1, -110, 0, 20)
-SongArtist.Position = UDim2.new(0, 102, 0, 40)
-SongArtist.BackgroundTransparency = 1
-SongArtist.Text = "—"
-SongArtist.TextColor3 = COLORS.TEXT_GRAY
-SongArtist.Font = Enum.Font.GothamMedium
-SongArtist.TextSize = 12
-SongArtist.TextXAlignment = Enum.TextXAlignment.Left
-SongArtist.Parent = NowPlayingSection
+-- ============================================
+-- EXPANDED PANEL (playlist)
+-- ============================================
+local ExpandedFrame = Instance.new("Frame")
+ExpandedFrame.Name = "ExpandedFrame"
+ExpandedFrame.Size = UDim2.new(0, 340, 0, 400)
+ExpandedFrame.Position = UDim2.new(0.5, -170, 1, -482)
+ExpandedFrame.BackgroundColor3 = C.BG
+ExpandedFrame.BorderSizePixel = 0
+ExpandedFrame.Visible = false
+ExpandedFrame.Active = true
+ExpandedFrame.Parent = ScreenGui
 
-local SongIdLabel = Instance.new("TextLabel")
-SongIdLabel.Size = UDim2.new(1, -110, 0, 16)
-SongIdLabel.Position = UDim2.new(0, 102, 0, 62)
-SongIdLabel.BackgroundTransparency = 1
-SongIdLabel.Text = ""
-SongIdLabel.TextColor3 = COLORS.TEXT_SUBTLE
-SongIdLabel.Font = Enum.Font.Code
-SongIdLabel.TextSize = 10
-SongIdLabel.TextXAlignment = Enum.TextXAlignment.Left
-SongIdLabel.Parent = NowPlayingSection
+local ExpCorner = Instance.new("UICorner")
+ExpCorner.CornerRadius = UDim.new(0, 10)
+ExpCorner.Parent = ExpandedFrame
 
--- Progress
-local ProgressSection = Instance.new("Frame")
-ProgressSection.Size = UDim2.new(1, -28, 0, 30)
-ProgressSection.Position = UDim2.new(0, 14, 0, 168)
-ProgressSection.BackgroundTransparency = 1
-ProgressSection.Parent = MainFrame
+local ExpStroke = Instance.new("UIStroke")
+ExpStroke.Color = Color3.fromRGB(50, 50, 50)
+ExpStroke.Thickness = 1
+ExpStroke.Parent = ExpandedFrame
 
-local ProgressBg = Instance.new("Frame")
-ProgressBg.Size = UDim2.new(1, 0, 0, 4)
-ProgressBg.Position = UDim2.new(0, 0, 0, 8)
-ProgressBg.BackgroundColor3 = COLORS.PROGRESS_BG
-ProgressBg.BorderSizePixel = 0
-ProgressBg.Parent = ProgressSection
+-- Header
+local ExpHeader = Instance.new("Frame")
+ExpHeader.Size = UDim2.new(1, 0, 0, 42)
+ExpHeader.BackgroundColor3 = C.BG_LIGHT
+ExpHeader.BorderSizePixel = 0
+ExpHeader.Parent = ExpandedFrame
 
-local ProgressBgCorner = Instance.new("UICorner")
-ProgressBgCorner.CornerRadius = UDim.new(1, 0)
-ProgressBgCorner.Parent = ProgressBg
+local ExpHeaderCorner = Instance.new("UICorner")
+ExpHeaderCorner.CornerRadius = UDim.new(0, 10)
+ExpHeaderCorner.Parent = ExpHeader
 
-local ProgressFill = Instance.new("Frame")
-ProgressFill.Size = UDim2.new(0, 0, 1, 0)
-ProgressFill.BackgroundColor3 = COLORS.PROGRESS_FILL
-ProgressFill.BorderSizePixel = 0
-ProgressFill.Parent = ProgressBg
+local ExpLogo = Instance.new("Frame")
+ExpLogo.Size = UDim2.new(0, 26, 0, 26)
+ExpLogo.Position = UDim2.new(0, 10, 0, 8)
+ExpLogo.BackgroundColor3 = C.GREEN
+ExpLogo.BorderSizePixel = 0
+ExpLogo.Parent = ExpHeader
 
-local ProgressFillCorner = Instance.new("UICorner")
-ProgressFillCorner.CornerRadius = UDim.new(1, 0)
-ProgressFillCorner.Parent = ProgressFill
+local ExpLogoCorner = Instance.new("UICorner")
+ExpLogoCorner.CornerRadius = UDim.new(1, 0)
+ExpLogoCorner.Parent = ExpLogo
 
-local ProgressBtn = Instance.new("TextButton")
-ProgressBtn.Size = UDim2.new(0, 12, 0, 12)
-ProgressBtn.Position = UDim2.new(0, -6, 0, 4)
-ProgressBtn.BackgroundColor3 = COLORS.PROGRESS_FILL
-ProgressBtn.Text = ""
-ProgressBtn.BorderSizePixel = 0
-ProgressBtn.AutoButtonColor = false
-ProgressBtn.Parent = ProgressSection
+local ExpLogoText = Instance.new("TextLabel")
+ExpLogoText.Size = UDim2.new(1, 0, 1, 0)
+ExpLogoText.BackgroundTransparency = 1
+ExpLogoText.Text = "♪"
+ExpLogoText.TextColor3 = Color3.fromRGB(0, 0, 0)
+ExpLogoText.Font = Enum.Font.GothamBold
+ExpLogoText.TextSize = 16
+ExpLogoText.Parent = ExpLogo
 
-local ProgressBtnCorner = Instance.new("UICorner")
-ProgressBtnCorner.CornerRadius = UDim.new(1, 0)
-ProgressBtnCorner.Parent = ProgressBtn
+local ExpTitle = Instance.new("TextLabel")
+ExpTitle.Size = UDim2.new(1, -80, 1, 0)
+ExpTitle.Position = UDim2.new(0, 44, 0, 0)
+ExpTitle.BackgroundTransparency = 1
+ExpTitle.Text = "Yuszx Music"
+ExpTitle.TextColor3 = C.WHITE
+ExpTitle.Font = Enum.Font.GothamBold
+ExpTitle.TextSize = 14
+ExpTitle.TextXAlignment = Enum.TextXAlignment.Left
+ExpTitle.Parent = ExpHeader
 
-local TimeCurrent = Instance.new("TextLabel")
-TimeCurrent.Size = UDim2.new(0, 50, 0, 14)
-TimeCurrent.Position = UDim2.new(0, 0, 0, 16)
-TimeCurrent.BackgroundTransparency = 1
-TimeCurrent.Text = "0:00"
-TimeCurrent.TextColor3 = COLORS.TEXT_GRAY
-TimeCurrent.Font = Enum.Font.GothamMedium
-TimeCurrent.TextSize = 10
-TimeCurrent.TextXAlignment = Enum.TextXAlignment.Left
-TimeCurrent.Parent = ProgressSection
+local CollapseBtn = Instance.new("TextButton")
+CollapseBtn.Size = UDim2.new(0, 30, 0, 30)
+CollapseBtn.Position = UDim2.new(1, -36, 0, 6)
+CollapseBtn.BackgroundTransparency = 1
+CollapseBtn.Text = "▼"
+CollapseBtn.TextColor3 = C.WHITE
+CollapseBtn.Font = Enum.Font.GothamBold
+CollapseBtn.TextSize = 12
+CollapseBtn.BorderSizePixel = 0
+CollapseBtn.AutoButtonColor = false
+CollapseBtn.Parent = ExpHeader
 
-local TimeTotal = Instance.new("TextLabel")
-TimeTotal.Size = UDim2.new(0, 50, 0, 14)
-TimeTotal.Position = UDim2.new(1, -50, 0, 16)
-TimeTotal.BackgroundTransparency = 1
-TimeTotal.Text = "0:00"
-TimeTotal.TextColor3 = COLORS.TEXT_GRAY
-TimeTotal.Font = Enum.Font.GothamMedium
-TimeTotal.TextSize = 10
-TimeTotal.TextXAlignment = Enum.TextXAlignment.Right
-TimeTotal.Parent = ProgressSection
+-- Now Playing (expanded)
+local ExpNowPlaying = Instance.new("Frame")
+ExpNowPlaying.Size = UDim2.new(1, -20, 0, 70)
+ExpNowPlaying.Position = UDim2.new(0, 10, 0, 50)
+ExpNowPlaying.BackgroundColor3 = C.BG_LIGHT
+ExpNowPlaying.BorderSizePixel = 0
+ExpNowPlaying.Parent = ExpandedFrame
 
--- Controls
-local ControlsFrame = Instance.new("Frame")
-ControlsFrame.Size = UDim2.new(1, -28, 0, 50)
-ControlsFrame.Position = UDim2.new(0, 14, 0, 204)
-ControlsFrame.BackgroundTransparency = 1
-ControlsFrame.Parent = MainFrame
+local ExpNP_Corner = Instance.new("UICorner")
+ExpNP_Corner.CornerRadius = UDim.new(0, 8)
+ExpNP_Corner.Parent = ExpNowPlaying
 
-local ControlsLayout = Instance.new("UIListLayout")
-ControlsLayout.FillDirection = Enum.FillDirection.Horizontal
-ControlsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-ControlsLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-ControlsLayout.Padding = UDim.new(0, 12)
-ControlsLayout.Parent = ControlsFrame
+local ExpAlbum = Instance.new("Frame")
+ExpAlbum.Size = UDim2.new(0, 54, 0, 54)
+ExpAlbum.Position = UDim2.new(0, 8, 0, 8)
+ExpAlbum.BackgroundColor3 = C.CARD
+ExpAlbum.BorderSizePixel = 0
+ExpAlbum.Parent = ExpNowPlaying
 
-local function makeCtrlBtn(text, size, callback, isPrimary)
+local ExpAlbumCorner = Instance.new("UICorner")
+ExpAlbumCorner.CornerRadius = UDim.new(0, 6)
+ExpAlbumCorner.Parent = ExpAlbum
+
+local ExpAlbumIcon = Instance.new("TextLabel")
+ExpAlbumIcon.Size = UDim2.new(1, 0, 1, 0)
+ExpAlbumIcon.BackgroundTransparency = 1
+ExpAlbumIcon.Text = "🎵"
+ExpAlbumIcon.TextColor3 = C.GREEN
+ExpAlbumIcon.Font = Enum.Font.GothamBold
+ExpAlbumIcon.TextSize = 26
+ExpAlbumIcon.Parent = ExpAlbum
+
+local ExpSongTitle = Instance.new("TextLabel")
+ExpSongTitle.Size = UDim2.new(1, -80, 0, 18)
+ExpSongTitle.Position = UDim2.new(0, 70, 0, 10)
+ExpSongTitle.BackgroundTransparency = 1
+ExpSongTitle.Text = "Pilih lagu..."
+ExpSongTitle.TextColor3 = C.WHITE
+ExpSongTitle.Font = Enum.Font.GothamBold
+ExpSongTitle.TextSize = 12
+ExpSongTitle.TextXAlignment = Enum.TextXAlignment.Left
+ExpSongTitle.TextTruncate = Enum.TextTruncate.AtEnd
+ExpSongTitle.Parent = ExpNowPlaying
+
+local ExpSongArtist = Instance.new("TextLabel")
+ExpSongArtist.Size = UDim2.new(1, -80, 0, 14)
+ExpSongArtist.Position = UDim2.new(0, 70, 0, 30)
+ExpSongArtist.BackgroundTransparency = 1
+ExpSongArtist.Text = "—"
+ExpSongArtist.TextColor3 = C.GRAY
+ExpSongArtist.Font = Enum.Font.GothamMedium
+ExpSongArtist.TextSize = 10
+ExpSongArtist.TextXAlignment = Enum.TextXAlignment.Left
+ExpSongArtist.TextTruncate = Enum.TextTruncate.AtEnd
+ExpSongArtist.Parent = ExpNowPlaying
+
+local ExpSongId = Instance.new("TextLabel")
+ExpSongId.Size = UDim2.new(1, -80, 0, 12)
+ExpSongId.Position = UDim2.new(0, 70, 0, 48)
+ExpSongId.BackgroundTransparency = 1
+ExpSongId.Text = ""
+ExpSongId.TextColor3 = C.DIM
+ExpSongId.Font = Enum.Font.Code
+ExpSongId.TextSize = 9
+ExpSongId.TextXAlignment = Enum.TextXAlignment.Left
+ExpSongId.Parent = ExpNowPlaying
+
+-- Controls row (expanded)
+local ExpControls = Instance.new("Frame")
+ExpControls.Size = UDim2.new(1, -20, 0, 40)
+ExpControls.Position = UDim2.new(0, 10, 0, 128)
+ExpControls.BackgroundTransparency = 1
+ExpControls.Parent = ExpandedFrame
+
+local ExpCtrlLayout = Instance.new("UIListLayout")
+ExpCtrlLayout.FillDirection = Enum.FillDirection.Horizontal
+ExpCtrlLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+ExpCtrlLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+ExpCtrlLayout.Padding = UDim.new(0, 12)
+ExpCtrlLayout.Parent = ExpControls
+
+local function makeExpCtrl(text, size, callback)
     local btn = Instance.new("TextButton")
     btn.Size = UDim2.new(0, size, 0, size)
-    btn.BackgroundColor3 = isPrimary and COLORS.TEXT_WHITE or Color3.fromRGB(0, 0, 0)
-    btn.BackgroundTransparency = isPrimary and 0 or 1
+    btn.BackgroundTransparency = 1
     btn.Text = text
-    btn.TextColor3 = isPrimary and Color3.fromRGB(0, 0, 0) or COLORS.TEXT_GRAY
+    btn.TextColor3 = C.WHITE
     btn.Font = Enum.Font.GothamBold
-    btn.TextSize = isPrimary and 20 or 16
+    btn.TextSize = size > 30 and 18 or 14
     btn.BorderSizePixel = 0
     btn.AutoButtonColor = false
-    btn.Parent = ControlsFrame
-    
-    local c = Instance.new("UICorner")
-    c.CornerRadius = UDim.new(1, 0)
-    c.Parent = btn
-    
+    btn.Parent = ExpControls
     btn.MouseButton1Click:Connect(callback)
-    
-    btn.MouseEnter:Connect(function()
-        if isPrimary then
-            btn.BackgroundColor3 = COLORS.GREEN_HOVER
-        else
-            btn.TextColor3 = COLORS.TEXT_WHITE
-        end
-    end)
-    btn.MouseLeave:Connect(function()
-        if isPrimary then
-            btn.BackgroundColor3 = COLORS.TEXT_WHITE
-        else
-            btn.TextColor3 = COLORS.TEXT_GRAY
-        end
-    end)
-    
     return btn
 end
 
-local ShuffleBtn = makeCtrlBtn("🔀", 32, function()
+makeExpCtrl("🔀", 28, function()
     local s = not Config.get("Shuffle", false)
     Config.set("Shuffle", s)
-    ShuffleBtn.TextColor3 = s and COLORS.GREEN or COLORS.TEXT_GRAY
 end)
-if Config.get("Shuffle", false) then ShuffleBtn.TextColor3 = COLORS.GREEN end
-
-makeCtrlBtn("⏮", 32, function() playPrev() end)
-
-local PlayPauseBtn = makeCtrlBtn("▶", 48, function() togglePlay() end, true)
-
-makeCtrlBtn("⏭", 32, function() playNext() end)
-
-local RepeatBtn = makeCtrlBtn("🔁", 32, function()
+makeExpCtrl("⏮", 32, function() playPrev() end)
+local ExpPlayBtn = makeExpCtrl("▶", 40, function() togglePlay() end)
+makeExpCtrl("⏭", 32, function() playNext() end)
+makeExpCtrl("🔁", 28, function()
     local l = not Config.get("Loop", false)
     Config.set("Loop", l)
-    RepeatBtn.TextColor3 = l and COLORS.GREEN or COLORS.TEXT_GRAY
     if currentSound then currentSound.Looped = l end
 end)
-if Config.get("Loop", false) then RepeatBtn.TextColor3 = COLORS.GREEN end
 
 -- Volume
-local VolumeFrame = Instance.new("Frame")
-VolumeFrame.Size = UDim2.new(0, 140, 0, 30)
-VolumeFrame.Position = UDim2.new(0, 14, 0, 258)
-VolumeFrame.BackgroundTransparency = 1
-VolumeFrame.Parent = MainFrame
+local VolFrame = Instance.new("Frame")
+VolFrame.Size = UDim2.new(1, -20, 0, 22)
+VolFrame.Position = UDim2.new(0, 10, 0, 172)
+VolFrame.BackgroundTransparency = 1
+VolFrame.Parent = ExpandedFrame
 
 local VolIcon = Instance.new("TextLabel")
-VolIcon.Size = UDim2.new(0, 24, 1, 0)
+VolIcon.Size = UDim2.new(0, 20, 1, 0)
 VolIcon.BackgroundTransparency = 1
 VolIcon.Text = "🔊"
-VolIcon.TextColor3 = COLORS.TEXT_GRAY
+VolIcon.TextColor3 = C.GRAY
 VolIcon.Font = Enum.Font.GothamBold
-VolIcon.TextSize = 14
-VolIcon.Parent = VolumeFrame
+VolIcon.TextSize = 12
+VolIcon.Parent = VolFrame
 
 local VolBarBg = Instance.new("Frame")
-VolBarBg.Size = UDim2.new(1, -30, 0, 4)
-VolBarBg.Position = UDim2.new(0, 28, 0, 13)
-VolBarBg.BackgroundColor3 = COLORS.PROGRESS_BG
+VolBarBg.Size = UDim2.new(1, -50, 0, 4)
+VolBarBg.Position = UDim2.new(0, 24, 0, 9)
+VolBarBg.BackgroundColor3 = C.TRACK
 VolBarBg.BorderSizePixel = 0
-VolBarBg.Parent = VolumeFrame
+VolBarBg.Parent = VolFrame
 
-local VolBgCorner = Instance.new("UICorner")
-VolBgCorner.CornerRadius = UDim.new(1, 0)
-VolBgCorner.Parent = VolBarBg
+local VolBarCorner = Instance.new("UICorner")
+VolBarCorner.CornerRadius = UDim.new(1, 0)
+VolBarCorner.Parent = VolBarBg
 
 local VolFill = Instance.new("Frame")
 VolFill.Size = UDim2.new(Config.get("Volume", 0.5), 0, 1, 0)
-VolFill.BackgroundColor3 = COLORS.GREEN
+VolFill.BackgroundColor3 = C.WHITE
 VolFill.BorderSizePixel = 0
 VolFill.Parent = VolBarBg
 
@@ -926,9 +903,9 @@ VolFillCorner.CornerRadius = UDim.new(1, 0)
 VolFillCorner.Parent = VolFill
 
 local VolKnob = Instance.new("TextButton")
-VolKnob.Size = UDim2.new(0, 12, 0, 12)
-VolKnob.Position = UDim2.new(Config.get("Volume", 0.5), -6, 0, -4)
-VolKnob.BackgroundColor3 = COLORS.TEXT_WHITE
+VolKnob.Size = UDim2.new(0, 10, 0, 10)
+VolKnob.Position = UDim2.new(Config.get("Volume", 0.5), -5, 0, -3)
+VolKnob.BackgroundColor3 = C.WHITE
 VolKnob.Text = ""
 VolKnob.BorderSizePixel = 0
 VolKnob.AutoButtonColor = false
@@ -938,61 +915,51 @@ local VolKnobCorner = Instance.new("UICorner")
 VolKnobCorner.CornerRadius = UDim.new(1, 0)
 VolKnobCorner.Parent = VolKnob
 
-local VolPct = Instance.new("TextLabel")
-VolPct.Size = UDim2.new(0, 40, 0, 14)
-VolPct.Position = UDim2.new(1, -45, 0, 8)
-VolPct.BackgroundTransparency = 1
-VolPct.Text = math.floor(Config.get("Volume", 0.5) * 100) .. "%"
-VolPct.TextColor3 = COLORS.TEXT_GRAY
-VolPct.Font = Enum.Font.GothamMedium
-VolPct.TextSize = 10
-VolPct.Parent = VolumeFrame
-
 -- Search
 local SearchFrame = Instance.new("Frame")
-SearchFrame.Size = UDim2.new(1, -28, 0, 36)
-SearchFrame.Position = UDim2.new(0, 14, 0, 296)
-SearchFrame.BackgroundColor3 = COLORS.BG_CARD
+SearchFrame.Size = UDim2.new(1, -20, 0, 30)
+SearchFrame.Position = UDim2.new(0, 10, 0, 202)
+SearchFrame.BackgroundColor3 = C.BG_LIGHT
 SearchFrame.BorderSizePixel = 0
-SearchFrame.Parent = MainFrame
+SearchFrame.Parent = ExpandedFrame
 
 local SearchCorner = Instance.new("UICorner")
-SearchCorner.CornerRadius = UDim.new(0, 18)
+SearchCorner.CornerRadius = UDim.new(0, 15)
 SearchCorner.Parent = SearchFrame
 
 local SearchIcon = Instance.new("TextLabel")
-SearchIcon.Size = UDim2.new(0, 30, 1, 0)
+SearchIcon.Size = UDim2.new(0, 24, 1, 0)
 SearchIcon.Position = UDim2.new(0, 8, 0, 0)
 SearchIcon.BackgroundTransparency = 1
 SearchIcon.Text = "🔍"
-SearchIcon.TextColor3 = COLORS.TEXT_GRAY
-SearchIcon.TextSize = 14
+SearchIcon.TextColor3 = C.GRAY
+SearchIcon.TextSize = 11
 SearchIcon.Parent = SearchFrame
 
 local SearchBox = Instance.new("TextBox")
-SearchBox.Size = UDim2.new(1, -50, 1, 0)
-SearchBox.Position = UDim2.new(0, 40, 0, 0)
+SearchBox.Size = UDim2.new(1, -38, 1, 0)
+SearchBox.Position = UDim2.new(0, 34, 0, 0)
 SearchBox.BackgroundTransparency = 1
 SearchBox.Text = ""
 SearchBox.PlaceholderText = "Cari lagu atau artis..."
-SearchBox.PlaceholderColor3 = COLORS.TEXT_SUBTLE
-SearchBox.TextColor3 = COLORS.TEXT_WHITE
+SearchBox.PlaceholderColor3 = C.DIM
+SearchBox.TextColor3 = C.WHITE
 SearchBox.Font = Enum.Font.GothamMedium
-SearchBox.TextSize = 12
+SearchBox.TextSize = 11
 SearchBox.TextXAlignment = Enum.TextXAlignment.Left
 SearchBox.ClearTextOnFocus = false
 SearchBox.Parent = SearchFrame
 
 -- Playlist
 local ListFrame = Instance.new("ScrollingFrame")
-ListFrame.Size = UDim2.new(1, -28, 1, -365)
-ListFrame.Position = UDim2.new(0, 14, 0, 342)
-ListFrame.BackgroundColor3 = COLORS.BG_DARK
+ListFrame.Size = UDim2.new(1, -20, 1, -250)
+ListFrame.Position = UDim2.new(0, 10, 0, 240)
+ListFrame.BackgroundColor3 = C.BG_LIGHT
 ListFrame.BorderSizePixel = 0
-ListFrame.ScrollBarThickness = 4
-ListFrame.ScrollBarImageColor3 = COLORS.GREEN
+ListFrame.ScrollBarThickness = 3
+ListFrame.ScrollBarImageColor3 = C.GREEN
 ListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
-ListFrame.Parent = MainFrame
+ListFrame.Parent = ExpandedFrame
 
 local ListCorner = Instance.new("UICorner")
 ListCorner.CornerRadius = UDim.new(0, 8)
@@ -1003,15 +970,15 @@ ListLayout.Padding = UDim.new(0, 2)
 ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 ListLayout.Parent = ListFrame
 
-local ListPadding = Instance.new("UIPadding")
-ListPadding.PaddingTop = UDim.new(0, 8)
-ListPadding.PaddingLeft = UDim.new(0, 8)
-ListPadding.PaddingRight = UDim.new(0, 8)
-ListPadding.PaddingBottom = UDim.new(0, 8)
-ListPadding.Parent = ListFrame
+local ListPad = Instance.new("UIPadding")
+ListPad.PaddingTop = UDim.new(0, 6)
+ListPad.PaddingLeft = UDim.new(0, 6)
+ListPad.PaddingRight = UDim.new(0, 6)
+ListPad.PaddingBottom = UDim.new(0, 6)
+ListPad.Parent = ListFrame
 
 -- ============================================
--- PLAYER FUNCTIONS
+-- PLAYER LOGIC
 -- ============================================
 local function stopCurrent()
     if currentSound then
@@ -1024,56 +991,35 @@ local function stopCurrent()
     isPlaying = false
 end
 
-local function formatTime(sec)
-    sec = math.floor(tonumber(sec) or 0)
-    if sec < 0 then sec = 0 end
-    return string.format("%d:%02d", math.floor(sec / 60), sec % 60)
-end
-
-local function updateNowPlaying()
-    if currentIndex >= 1 and currentIndex <= #PLAYLIST then
-        local song = PLAYLIST[currentIndex]
-        SongTitle.Text = song.title
-        SongArtist.Text = song.artist or "Unknown Artist"
-        SongIdLabel.Text = "📻 Sound ID: " .. song.id
-    end
-end
-
--- Universal sound creation
 local function createSound(id)
     local sound = Instance.new("Sound")
     sound.Name = "YuszxMusic"
     sound.SoundId = "rbxassetid://" .. id
     sound.Volume = Config.get("Volume", 0.5)
     sound.Looped = Config.get("Loop", false)
-    sound.Archivable = false
-    
-    -- Coba berbagai parent
-    local parents = {
-        soundParent,
-        SoundService,
-        workspace,
-        workspace.CurrentCamera,
-        Player.Character,
-    }
-    
+    local parents = {soundParent, game:GetService("SoundService"), workspace}
     for _, p in ipairs(parents) do
         if p then
-            local ok = pcall(function()
-                sound.Parent = p
-            end)
-            if ok and sound.Parent then
-                break
-            end
+            local ok = pcall(function() sound.Parent = p end)
+            if ok and sound.Parent then break end
         end
     end
-    
     return sound
 end
 
-local function playSongInternal(index)
+local function updateNowPlaying()
+    if currentIndex >= 1 and currentIndex <= #PLAYLIST then
+        local song = PLAYLIST[currentIndex]
+        MiniTitle.Text = song.title
+        MiniArtist.Text = song.artist or "Unknown"
+        ExpSongTitle.Text = song.title
+        ExpSongArtist.Text = song.artist or "Unknown"
+        ExpSongId.Text = "📻 Sound ID: " .. song.id
+    end
+end
+
+local function playSong(index)
     if index < 1 or index > #PLAYLIST then return end
-    
     stopCurrent()
     currentIndex = index
     local song = PLAYLIST[index]
@@ -1082,26 +1028,17 @@ local function playSongInternal(index)
     sound:Play()
     currentSound = sound
     isPlaying = true
-    PlayPauseBtn.Text = "⏸"
+    PlayBtn.Text = "⏸"
+    ExpPlayBtn.Text = "⏸"
     
-    -- Auto-next
     sound.Ended:Connect(function()
         if Config.get("Loop", false) then return end
         if not isPlaying then return end
-        playNext()
+        currentIndex = currentIndex + 1
+        if currentIndex > #PLAYLIST then currentIndex = 1 end
+        playSong(currentIndex)
+        updateNowPlaying()
     end)
-    
-    -- Load duration
-    task.spawn(function()
-        for _ = 1, 20 do
-            task.wait(0.5)
-            if sound and sound.Parent and sound.TimeLength > 0 then
-                break
-            end
-        end
-    end)
-    
-    return sound
 end
 
 function playNext()
@@ -1112,7 +1049,7 @@ function playNext()
         currentIndex = currentIndex + 1
         if currentIndex > #PLAYLIST then currentIndex = 1 end
     end
-    playSongInternal(currentIndex)
+    playSong(currentIndex)
     updateNowPlaying()
 end
 
@@ -1120,7 +1057,7 @@ function playPrev()
     if #PLAYLIST == 0 then return end
     currentIndex = currentIndex - 1
     if currentIndex < 1 then currentIndex = #PLAYLIST end
-    playSongInternal(currentIndex)
+    playSong(currentIndex)
     updateNowPlaying()
 end
 
@@ -1129,26 +1066,26 @@ function togglePlay()
         if isPlaying then
             currentSound:Pause()
             isPlaying = false
-            PlayPauseBtn.Text = "▶"
+            PlayBtn.Text = "▶"
+            ExpPlayBtn.Text = "▶"
         else
             currentSound:Resume()
             isPlaying = true
-            PlayPauseBtn.Text = "⏸"
+            PlayBtn.Text = "⏸"
+            ExpPlayBtn.Text = "⏸"
         end
     else
-        playSongInternal(1)
+        playSong(1)
         updateNowPlaying()
     end
 end
 
 -- ============================================
--- PLAYLIST UI
+-- PLAYLIST ROWS
 -- ============================================
 local function refreshList()
     for _, child in ipairs(ListFrame:GetChildren()) do
-        if child:IsA("TextButton") or child:IsA("Frame") then
-            child:Destroy()
-        end
+        if child:IsA("TextButton") then child:Destroy() end
     end
     
     local filter = string.lower(SearchBox.Text or "")
@@ -1156,118 +1093,92 @@ local function refreshList()
     for i, song in ipairs(PLAYLIST) do
         local t = string.lower(song.title)
         local a = string.lower(song.artist or "")
-        local match = filter == "" 
-            or string.find(t, filter, 1, true) 
-            or string.find(a, filter, 1, true) 
-            or string.find(song.id, filter, 1, true)
-        
-        if match then
+        if filter == "" or string.find(t, filter, 1, true) or string.find(a, filter, 1, true) then
             local row = Instance.new("TextButton")
-            row.Size = UDim2.new(1, 0, 0, 44)
-            row.BackgroundColor3 = COLORS.BG_DARK
+            row.Size = UDim2.new(1, 0, 0, 38)
+            row.BackgroundColor3 = C.BG
             row.BackgroundTransparency = 1
             row.Text = ""
             row.BorderSizePixel = 0
             row.AutoButtonColor = false
             row.Parent = ListFrame
             
-            local rowCorner = Instance.new("UICorner")
-            rowCorner.CornerRadius = UDim.new(0, 6)
-            rowCorner.Parent = row
+            local rc = Instance.new("UICorner")
+            rc.CornerRadius = UDim.new(0, 6)
+            rc.Parent = row
             
             local miniArt = Instance.new("Frame")
-            miniArt.Size = UDim2.new(0, 32, 0, 32)
-            miniArt.Position = UDim2.new(0, 8, 0, 6)
-            miniArt.BackgroundColor3 = COLORS.BG_CARD
+            miniArt.Size = UDim2.new(0, 26, 0, 26)
+            miniArt.Position = UDim2.new(0, 6, 0, 6)
+            miniArt.BackgroundColor3 = C.CARD
             miniArt.BorderSizePixel = 0
             miniArt.Parent = row
             
-            local maCorner = Instance.new("UICorner")
-            maCorner.CornerRadius = UDim.new(0, 4)
-            maCorner.Parent = miniArt
+            local mac = Instance.new("UICorner")
+            mac.CornerRadius = UDim.new(0, 4)
+            mac.Parent = miniArt
             
             local maIcon = Instance.new("TextLabel")
             maIcon.Size = UDim2.new(1, 0, 1, 0)
             maIcon.BackgroundTransparency = 1
             maIcon.Text = "♪"
-            maIcon.TextColor3 = COLORS.GREEN
+            maIcon.TextColor3 = C.GREEN
             maIcon.Font = Enum.Font.GothamBold
-            maIcon.TextSize = 18
+            maIcon.TextSize = 13
             maIcon.Parent = miniArt
             
-            local rowTitle = Instance.new("TextLabel")
-            rowTitle.Size = UDim2.new(1, -130, 0, 18)
-            rowTitle.Position = UDim2.new(0, 48, 0, 6)
-            rowTitle.BackgroundTransparency = 1
-            rowTitle.Text = song.title
-            rowTitle.TextColor3 = COLORS.TEXT_WHITE
-            rowTitle.Font = Enum.Font.GothamMedium
-            rowTitle.TextSize = 12
-            rowTitle.TextXAlignment = Enum.TextXAlignment.Left
-            rowTitle.TextTruncate = Enum.TextTruncate.AtEnd
-            rowTitle.Parent = row
+            local rTitle = Instance.new("TextLabel")
+            rTitle.Size = UDim2.new(1, -50, 0, 15)
+            rTitle.Position = UDim2.new(0, 40, 0, 4)
+            rTitle.BackgroundTransparency = 1
+            rTitle.Text = song.title
+            rTitle.TextColor3 = C.WHITE
+            rTitle.Font = Enum.Font.GothamMedium
+            rTitle.TextSize = 11
+            rTitle.TextXAlignment = Enum.TextXAlignment.Left
+            rTitle.TextTruncate = Enum.TextTruncate.AtEnd
+            rTitle.Parent = row
             
-            local rowArtist = Instance.new("TextLabel")
-            rowArtist.Size = UDim2.new(1, -130, 0, 16)
-            rowArtist.Position = UDim2.new(0, 48, 0, 24)
-            rowArtist.BackgroundTransparency = 1
-            rowArtist.Text = song.artist or "Unknown"
-            rowArtist.TextColor3 = COLORS.TEXT_GRAY
-            rowArtist.Font = Enum.Font.GothamMedium
-            rowArtist.TextSize = 10
-            rowArtist.TextXAlignment = Enum.TextXAlignment.Left
-            rowArtist.TextTruncate = Enum.TextTruncate.AtEnd
-            rowArtist.Parent = row
+            local rArtist = Enum.Font.GothamMedium
+            local rArtistLabel = Instance.new("TextLabel")
+            rArtistLabel.Size = UDim2.new(1, -50, 0, 13)
+            rArtistLabel.Position = UDim2.new(0, 40, 0, 20)
+            rArtistLabel.BackgroundTransparency = 1
+            rArtistLabel.Text = song.artist or "Unknown"
+            rArtistLabel.TextColor3 = C.GRAY
+            rArtistLabel.Font = rArtist
+            rArtistLabel.TextSize = 9
+            rArtistLabel.TextXAlignment = Enum.TextXAlignment.Left
+            rArtistLabel.TextTruncate = Enum.TextTruncate.AtEnd
+            rArtistLabel.Parent = row
             
-            local playIcon = Instance.new("TextLabel")
-            playIcon.Size = UDim2.new(0, 30, 1, 0)
-            playIcon.Position = UDim2.new(1, -40, 0, 0)
-            playIcon.BackgroundTransparency = 1
-            playIcon.Text = "▶"
-            playIcon.TextColor3 = COLORS.GREEN
-            playIcon.Font = Enum.Font.GothamBold
-            playIcon.TextSize = 12
-            playIcon.TextTransparency = 1
-            playIcon.Parent = row
-            
-            row.MouseEnter:Connect(function()
-                row.BackgroundTransparency = 0
-                playIcon.TextTransparency = 0
-            end)
-            row.MouseLeave:Connect(function()
-                row.BackgroundTransparency = 1
-                playIcon.TextTransparency = 1
-            end)
-            
+            row.MouseEnter:Connect(function() row.BackgroundTransparency = 0 end)
+            row.MouseLeave:Connect(function() row.BackgroundTransparency = 1 end)
             row.MouseButton1Click:Connect(function()
-                playSongInternal(i)
+                playSong(i)
                 updateNowPlaying()
             end)
         end
     end
     
     task.wait(0.05)
-    ListFrame.CanvasSize = UDim2.new(0, 0, 0, ListLayout.AbsoluteContentSize.Y + 20)
+    ListFrame.CanvasSize = UDim2.new(0, 0, 0, ListLayout.AbsoluteContentSize.Y + 12)
 end
 
 SearchBox:GetPropertyChangedSignal("Text"):Connect(refreshList)
 
 -- ============================================
--- PROGRESS UPDATE
+-- PROGRESS UPDATE LOOP
 -- ============================================
 task.spawn(function()
     while ScreenGui.Parent do
-        RunService.RenderStepped:Wait()
+        task.wait(0.1)
         pcall(function()
             if currentSound and currentSound.Parent and currentSound.IsPlaying then
                 local length = currentSound.TimeLength
                 local pos = currentSound.TimePosition
                 if length > 0 then
-                    local pct = math.clamp(pos / length, 0, 1)
-                    ProgressFill.Size = UDim2.new(pct, 0, 1, 0)
-                    ProgressBtn.Position = UDim2.new(pct, -6, 0, 4)
-                    TimeCurrent.Text = formatTime(pos)
-                    TimeTotal.Text = formatTime(length)
+                    TopProgressFill.Size = UDim2.new(math.clamp(pos / length, 0, 1), 0, 1, 0)
                 end
             end
         end)
@@ -1275,51 +1186,23 @@ task.spawn(function()
 end)
 
 -- ============================================
--- PROGRESS SEEK
+-- HANDLERS
 -- ============================================
-local seekingProgress = false
+PlayBtn.MouseButton1Click:Connect(togglePlay)
+PrevBtn.MouseButton1Click:Connect(function() playPrev(); updateNowPlaying() end)
+NextBtn.MouseButton1Click:Connect(function() playNext(); updateNowShowing = nil; updateNowPlaying() end)
 
-ProgressBtn.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 
-       or input.UserInputType == Enum.UserInputType.Touch then
-        seekingProgress = true
-    end
+ExpandBtn.MouseButton1Click:Connect(function()
+    isExpanded = true
+    ExpandedFrame.Visible = true
+    MiniFrame.Visible = false
+    refreshList()
 end)
 
-UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 
-       or input.UserInputType == Enum.UserInputType.Touch then
-        seekingProgress = false
-        draggingVol = false
-    end
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-    if input.UserInputType ~= Enum.UserInputType.MouseMovement 
-       and input.UserInputType ~= Enum.UserInputType.Touch then return end
-    
-    -- Progress seek
-    if seekingProgress and currentSound then
-        local mouseX = input.Position.X
-        local relX = mouseX - ProgressBg.AbsolutePosition.X
-        local pct = math.clamp(relX / ProgressBg.AbsoluteSize.X, 0, 1)
-        ProgressFill.Size = UDim2.new(pct, 0, 1, 0)
-        ProgressBtn.Position = UDim2.new(pct, -6, 0, 4)
-        pcall(function()
-            currentSound.TimePosition = pct * currentSound.TimeLength
-        end)
-    end
-    
-    -- Volume
-    if draggingVol and currentSound then
-        local mouseX = input.Position.X
-        local relX = mouseX - VolBarBg.AbsolutePosition.X
-        local pct = math.clamp(relX / VolBarBg.AbsoluteSize.X, 0, 1)
-        VolFill.Size = UDim2.new(pct, 0, 1, 0)
-        VolKnob.Position = UDim2.new(pct, -6, 0, -4)
-        VolPct.Text = math.floor(pct * 100) .. "%"
-        currentSound.Volume = pct
-    end
+CollapseBtn.MouseButton1Click:Connect(function()
+    isExpanded = false
+    ExpandedFrame.Visible = false
+    MiniFrame.Visible = true
 end)
 
 -- ============================================
@@ -1328,78 +1211,51 @@ end)
 local draggingVol = false
 
 VolKnob.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 
-       or input.UserInputType == Enum.UserInputType.Touch then
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         draggingVol = true
     end
 end)
 
+game:GetService("UserInputService").InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        if draggingVol then
+            draggingVol = false
+            Config.set("Volume", tonumber(VolFill.Size.X.Scale) or 0.5)
+        end
+    end
+end)
+
+game:GetService("UserInputService").InputChanged:Connect(function(input)
+    if not draggingVol then return end
+    if input.UserInputType ~= Enum.UserInputType.MouseMovement and input.UserInputType ~= Enum.UserInputType.Touch then return end
+    local relX = input.Position.X - VolBarBg.AbsolutePosition.X
+    local pct = math.clamp(relX / VolBarBg.AbsoluteSize.X, 0, 1)
+    VolFill.Size = UDim2.new(pct, 0, 1, 0)
+    VolKnob.Position = UDim2.new(pct, -5, 0, -3)
+    if currentSound then currentSound.Volume = pct end
+end)
+
 VolBarBg.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 
-       or input.UserInputType == Enum.UserInputType.Touch then
-        local mouseX = input.Position.X
-        local relX = mouseX - VolBarBg.AbsolutePosition.X
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        local relX = input.Position.X - VolBarBg.AbsolutePosition.X
         local pct = math.clamp(relX / VolBarBg.AbsoluteSize.X, 0, 1)
         VolFill.Size = UDim2.new(pct, 0, 1, 0)
-        VolKnob.Position = UDim2.new(pct, -6, 0, -4)
-        VolPct.Text = math.floor(pct * 100) .. "%"
+        VolKnob.Position = UDim2.new(pct, -5, 0, -3)
         Config.set("Volume", pct)
         if currentSound then currentSound.Volume = pct end
     end
 end)
 
 -- ============================================
--- MINIMIZE / CLOSE
+-- HANDLE RESPAWN
 -- ============================================
-local isMinimized = Config.get("UIMinimized", false)
-local uiElements = {NowPlayingSection, ProgressSection, ControlsFrame, VolumeFrame, SearchFrame, ListFrame}
-
-local function applyMinimize(state)
-    if state then
-        MainFrame.Size = UDim2.new(0, 500, 0, 50)
-        MinButton.Text = "□"
-        for _, o in ipairs(uiElements) do o.Visible = false end
-    else
-        MainFrame.Size = UDim2.new(0, 500, 0, 620)
-        MinButton.Text = "−"
-        for _, o in ipairs(uiElements) do o.Visible = true end
-    end
-end
-
-if isMinimized then applyMinimize(true) end
-
-MinButton.MouseButton1Click:Connect(function()
-    isMinimized = not isMinimized
-    applyMinimize(isMinimized)
-    Config.set("UIMinimized", isMinimized)
-end)
-
-CloseButton.MouseButton1Click:Connect(function()
-    ScreenGui:Destroy()
-    stopCurrent()
-end)
-
--- ============================================
--- HANDLE RESPAWN (kalau sound ke-destroy)
--- ============================================
-Player.CharacterAdded:Connect(function()
+game:GetService("Players").LocalPlayer.CharacterAdded:Connect(function()
     task.wait(1)
-    if currentSound and currentSound.Parent == nil then
-        -- Sound ke-destroy sama game, recreate
-        if currentIndex > 0 then
-            local wasPlaying = isPlaying
-            local lastPos = 0
-            pcall(function() lastPos = currentSound.TimePosition end)
-            
-            local song = PLAYLIST[currentIndex]
-            local sound = createSound(song.id)
-            currentSound = sound
-            if wasPlaying then
-                sound:Play()
-                task.wait(0.1)
-                pcall(function() sound.TimePosition = lastPos end)
-            end
-        end
+    if currentSound and not currentSound.Parent and currentIndex > 0 then
+        local wasPlaying = isPlaying
+        local sound = createSound(PLAYLIST[currentIndex].id)
+        currentSound = sound
+        if wasPlaying then sound:Play() end
     end
 end)
 
@@ -1407,10 +1263,4 @@ end)
 -- INIT
 -- ============================================
 refreshList()
-
-print("[Yuszx] ═══════════════════════════════════")
-print("[Yuszx] 🎵 Universal Spotify Edition loaded!")
-print("[Yuszx] UI Parent: " .. uiParent:GetFullName())
-print("[Yuszx] Sound Parent: " .. soundParent:GetFullName())
-print("[Yuszx] Total lagu: " .. #PLAYLIST)
-print("[Yuszx] ═══════════════════════════════════")
+print("[Yuszx] 🎵 Mobile Spotify loaded! " .. #PLAYLIST .. " lagu")
